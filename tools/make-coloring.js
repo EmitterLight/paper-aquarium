@@ -44,33 +44,108 @@ const STROKE_COLOR = '#8a8a8a';
 // языках сайта (лист печатается на том, который выбран),
 // len — длина рыбки в аквариуме (метры сцены),
 // eye — [z, y] в долях длины тела; null = посчитать автоматически.
-const LANGS = ['ru', 'en', 'pl'];
+const LANGS = ['ru', 'en'];
 
 const SPECIES = [
-  { name: 'clownfish',              len: 1.5, eye: null,
-    titles: { ru: 'Рыба-клоун',        en: 'Clownfish',                pl: 'Błazenek' } },
-  { name: 'bluetang',               len: 1.9, eye: null,
-    titles: { ru: 'Голубой хирург',    en: 'Blue tang',                pl: 'Chirurg niebieski' } },
-  { name: 'chelmonrostratus',       len: 1.7, eye: null,
-    titles: { ru: 'Рыба-пинцет',       en: 'Copperband butterflyfish', pl: 'Chelmon' } },
-  { name: 'clowntriggerfish',       len: 2.1, eye: null,
-    titles: { ru: 'Спинорог',          en: 'Clown triggerfish',        pl: 'Rogatnica klaun' } },
-  { name: 'frenchangelfish',        len: 2.4, eye: null,
-    titles: { ru: 'Французский ангел', en: 'French angelfish',         pl: 'Pomakant francuski' } },
-  { name: 'fusilierfish',           len: 1.6, eye: null,
-    titles: { ru: 'Цезио',             en: 'Fusilier',                 pl: 'Cezjo' } },
-  { name: 'blackspottedsweetlips',  len: 2.3, eye: null,
-    titles: { ru: 'Ворчун',            en: 'Sweetlips',                pl: 'Chrząkiew' } },
-  { name: 'coralgrouper',           len: 2.6, eye: null,
-    titles: { ru: 'Групер',            en: 'Coral grouper',            pl: 'Strzępiel koralowy' } },
-  { name: 'browntang',              len: 1.8, eye: null,
-    titles: { ru: 'Бурый хирург',      en: 'Brown tang',               pl: 'Chirurg brązowy' } },
-  { name: 'bicolorangelfish',       len: 1.7, eye: null,
-    titles: { ru: 'Двухцветный ангел', en: 'Bicolor angelfish',        pl: 'Pomakant dwubarwny' } },
-  { name: 'bluecheekbutterflyfish', len: 1.5, eye: null,
-    titles: { ru: 'Рыба-бабочка',      en: 'Butterflyfish',            pl: 'Motylek' } },
-  { name: 'discus1',                len: 1.8, eye: null,
-    titles: { ru: 'Дискус',            en: 'Discus',                   pl: 'Paletka' } }
+  {
+    "name": "alienfish",
+    "len": 1.9,
+    "eye": null,
+    "titles": {
+      "ru": "Хищник",
+      "en": "alienfish"
+    }
+  },
+  {
+    "name": "alienfishanimated",
+    "len": 2.6,
+    "eye": null,
+    "titles": {
+      "ru": "Мега Чужой",
+      "en": "alienfishanimated"
+    }
+  },
+  {
+    "name": "clownfish",
+    "len": 1.2,
+    "eye": null,
+    "titles": {
+      "ru": "Клоун",
+      "en": "clownfish"
+    }
+  },
+  {
+    "name": "carpanimated",
+    "len": 1.6,
+    "eye": null,
+    "titles": {
+      "ru": "Карп",
+      "en": "carpanimated"
+    }
+  },
+  {
+    "name": "carp",
+    "len": 1.9,
+    "eye": null,
+    "titles": {
+      "ru": "Карп",
+      "en": "carp"
+    }
+  },
+  {
+    "name": "fishanimated",
+    "len": 1.1,
+    "eye": null,
+    "titles": {
+      "ru": "Дебилёнок",
+      "en": "fishanimated"
+    }
+  },
+  {
+    "name": "fishsketchfab",
+    "len": 1.1,
+    "eye": null,
+    "titles": {
+      "ru": "Серебристик",
+      "en": "fishsketchfab"
+    }
+  },
+  {
+    "name": "koifish",
+    "len": 0.8,
+    "eye": null,
+    "titles": {
+      "ru": "Удивляш",
+      "en": "koifish"
+    }
+  },
+  {
+    "name": "sharkfish",
+    "len": 1.9,
+    "eye": null,
+    "titles": {
+      "ru": "Золотая акула",
+      "en": "sharkfish"
+    }
+  },
+  {
+    "name": "sharkcolor",
+    "len": 3.9,
+    "eye": null,
+    "titles": {
+      "ru": "Акула",
+      "en": "sharkcolor"
+    }
+  },
+  {
+    "name": "tunafish",
+    "len": 2.2,
+    "eye": null,
+    "titles": {
+      "ru": "Тунец",
+      "en": "tunafish"
+    }
+  }
 ];
 
 // Имя файла листа: русский лежит по старому адресу, остальные рядом с ним.

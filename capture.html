@@ -61,6 +61,12 @@
   }
   input[type=file] { display: none; }
 
+  /* «Открыть готовое фото» нужен только на телефоне: там основной input
+     своим capture="environment" поднимает камеру напрямую, а на десктопе
+     тот же input и так открывает выбор файла. */
+  #cap-pick { display: none; }
+  @media (pointer: coarse) { #cap-pick { display: block; } }
+
   .bubble { font-size: 64px; margin: 10px 0; }
   .fishname { font-size: 20px; font-weight: 600; margin: 14px 0 2px; }
 
@@ -138,6 +144,10 @@
   <div class="bubble">📷</div>
   <label class="big" for="file" data-t="cap.shoot"></label>
   <input type="file" id="file" accept="image/*" capture="environment">
+  <!-- вторая кнопка только на телефоне: камеру поднимает первый input,
+       а этот открывает готовый файл из памяти (галерею) -->
+  <label class="big ghost" id="cap-pick" for="file-pick" data-t="cap.pick"></label>
+  <input type="file" id="file-pick" accept="image/*">
   <p class="hintline" data-t="cap.hint"></p>
   <div class="qrrow" id="qrrow" hidden>
     <span class="qrbox" id="cap-qr"></span>
@@ -449,16 +459,18 @@
   });
   boostEl.addEventListener('change', applyBoost);
 
-  document.getElementById('file').addEventListener('change', function () {
-    var file = this.files && this.files[0];
-    this.value = '';
+  function onFileInput(e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
     if (!file || !manifest) return;
     show('s-busy');
     loadBitmap(file).then(window.handlePhoto, function () {
       document.getElementById('err-text').textContent = I18N.t('cap.err.photo');
       show('s-error');
     });
-  });
+  }
+  document.getElementById('file').addEventListener('change', onFileInput);
+  document.getElementById('file-pick').addEventListener('change', onFileInput);
 
   window.releaseFish = function () {         // отдельно — для автотестов
     if (!result) return Promise.reject(new Error(I18N.t('cap.err.nofish')));
