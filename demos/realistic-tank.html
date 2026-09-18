@@ -372,6 +372,14 @@
   var MARGIN = 1.6;
   var FLOOR_ROOM = 0.9;    // насколько выше пола разворачивает вверх
 
+  // Прибытие новой рыбы: её не создают в случайной точке объёма, а «запускают
+  // из-под крышки» — рыба спускается сверху, близко к камере и увеличенная,
+  // чтобы её можно было рассмотреть, и лишь войдя в воду, уменьшается до
+  // обычного размера и переключается на обычное плавание.
+  var ARRIVE_GROW = 1.7;      // во сколько раз крупнее в начале спуска
+  var ARRIVE_SPEED = 1.3;     // юнитов в секунду — медленно, чтобы успеть рассмотреть
+  var ARRIVE_WAIT = 1.2;      // максимум задержки перед спуском (для пачки — по очереди)
+
   // Ракурс зашит: «фронтально вплотную». Камера не крутится.
   var CAM_POS = [0, 6.5, 17.5], CAM_TARGET = [0, 6.5, 0];
 
@@ -754,7 +762,7 @@
     return { group: group, mixer: mixer, phase: phase, beatHz: beatHz };
   }
 
-  function Fish(spec, index) {
+  function Fish(spec, index, drop) {
     var built = spawnFromModel(spec, index);
     this.kind = spec.name;
     this.spec = spec;
@@ -768,19 +776,46 @@
 
     // Рождаемся сразу внутри допустимого объёма на своей глубине, иначе
     // рыба стартует за краем кадра и первые секунды выгребает обратно.
-    var z0 = Z_FAR + Math.random() * (Z_NEAR - Z_FAR);
-    var l0 = limitsAt(z0);
-    var inX = Math.max(0.5, l0.hw - MARGIN);
-    var inLo = l0.yBot + MARGIN;
-    var inHi = l0.yTop - MARGIN;
-    this.pos = new THREE.Vector3(
-      (Math.random() * 2 - 1) * inX,
-      inLo + Math.random() * Math.max(0.5, inHi - inLo),
-      z0
-    );
-    this.vel = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize().multiplyScalar(spec.speed);
+    // Новую рыбу так не запускаем — для неё есть спуск из-под крышки.
     this.speed = spec.speed * (0.85 + Math.random() * 0.3);
     this.phase = built.phase;
+
+    if (drop) {
+      // «Из-под крышки»: рыба появляется над верхней кромкой аквариума.
+      // Глубина — ближняя к камере зона, иначе новичка не разглядеть;
+      // дополнительно он увеличен и уменьшается уже к воде.
+      var az = Z_NEAR - 1 - Math.random() * 3;
+      var al = limitsAt(az);
+      this.arriving = true;
+      this.arriveWait = Math.random() * ARRIVE_WAIT;   // пачка спускается по очереди
+      this.arriveTop = al.yTop + 1.0;                  // старт — над кадром, вне видимости
+      // Цель спуска — верхняя половина видимого объёма: новичок остаётся
+      // на виду, а не тонет к самому дну.
+      this.settleY = al.yTop * 0.55 + al.yBot * 0.45;
+      this.baseScale = null;      // настоящий масштаб снимем на первом кадре (см. arrive)
+      this.pos = new THREE.Vector3(
+        (Math.random() * 2 - 1) * al.hw * 0.35,
+        this.arriveTop,
+        az
+      );
+      // Пока никакого плавания — только спуск. Скорость нужна для lookAt.
+      this.vel = new THREE.Vector3(0, -1, 0.3).normalize().multiplyScalar(this.speed);
+      // Меш сразу ставим в точку старта, а не оставляем в начале координат:
+      // во время ожидания очереди (arriveWait) иначе он был бы виден у дна.
+      this.mesh.position.copy(this.pos);
+    } else {
+      var z0 = Z_FAR + Math.random() * (Z_NEAR - Z_FAR);
+      var l0 = limitsAt(z0);
+      var inX = Math.max(0.5, l0.hw - MARGIN);
+      var inLo = l0.yBot + MARGIN;
+      var inHi = l0.yTop - MARGIN;
+      this.pos = new THREE.Vector3(
+        (Math.random() * 2 - 1) * inX,
+        inLo + Math.random() * Math.max(0.5, inHi - inLo),
+        z0
+      );
+      this.vel = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize().multiplyScalar(this.speed);
+    }
 
     // Голод. noticeFood — с какого расстояния рыба видит корм: у каждой свой,
     // чтобы стая не срывалась к еде одновременно. fullUntil — до какой секунды
@@ -792,7 +827,45 @@
 
   var _a = new THREE.Vector3(), _l = new THREE.Vector3(), _d = new THREE.Vector3();
 
+  // Прибытие — спуск из-под крышки. Обычный алгоритм плавания на это время
+  // не работает: рыба не сворачивает к корму и не отталкивается от стенок,
+  // а просто медленно тонет, покачиваясь, и уменьшается до своего размера.
+  Fish.prototype.arrive = function (dt, t) {
+    // Задержка перед выходом: пачка рыб, добавленных разом, спускается по
+    // очереди, а не строем. Всё это время новичок висит над кадром — его
+    // не видно, так что спуск никому ничего не закрывает.
+    if (this.arriveWait > 0) { this.arriveWait -= dt; return; }
+
+    // Масштаб снимаем здесь, а не в конструкторе: у раскрашенной рыбки он
+    // выставляется сразу после создания, и к первому кадру уже готов.
+    if (!this.baseScale) this.baseScale = this.mesh.scale.clone();
+
+    this.pos.y -= ARRIVE_SPEED * dt;
+    // Лёгкое покачивание: кажется, что рыба сама выбирает дорогу в толще
+    // воды, а не падает застывшей заготовкой.
+    this.pos.x += Math.sin(t * 0.5 + this.phase) * dt * 0.35;
+    this.mesh.position.copy(this.pos);
+    // Голова смотрит вниз, в сторону дна.
+    this.mesh.lookAt(this.pos.x - Math.sin(t * 0.4 + this.phase), this.pos.y - 2, this.pos.z);
+
+    // В начале спуска рыба увеличенная — её можно рассмотреть; к воде
+    // уменьшается до обычного размера и дальше плавает как все.
+    var k = Math.max(0, Math.min(1, (this.arriveTop - this.pos.y) / (this.arriveTop - this.settleY)));
+    var grow = 1 + (ARRIVE_GROW - 1) * Math.pow(1 - k, 1.5);
+    this.mesh.scale.copy(this.baseScale).multiplyScalar(grow);
+
+    if (this.pos.y < this.settleY) {
+      // Вошла в воду — обычный алгоритм плавания, с тем же темпом взмахов.
+      this.arriving = false;
+      this.mesh.scale.copy(this.baseScale);
+      this.vel.set(Math.random() - 0.5, -0.2, Math.random() - 0.5)
+        .normalize().multiplyScalar(this.speed);
+    }
+  };
+
   Fish.prototype.update = function (dt, t) {
+    // Прибытие — спуск из-под крышки; обычное плавание стартует после.
+    if (this.arriving) { this.arrive(dt, t); return; }
     _a.set(
       Math.sin(t * 0.42 + this.phase) * 0.5,
       Math.sin(t * 0.3 + this.phase * 1.6) * 0.22,
@@ -1031,6 +1104,9 @@
   var paintedSpec = {};   // вид → {length} из манифеста раскрасок
   var paintedSeen = {}, paintedCount = 0, paintedTemplates = {};
   var paintedSpecRefreshed = false;   // манифест уже перечитывали в защитной ветке
+  // Первую синхронизацию (рыбы, что жили в аквариуме, когда страница открылась)
+  // распутываем без спуска — «из-под крышки» приходят только добавленные после.
+  var appliedOnce = false;
 
   function paintedModel(kind) { return LEGACY_KIND[kind] || kind; }
   function paintedLen(kind) {
@@ -1094,7 +1170,7 @@
     return paintedTemplates[kind];
   }
 
-  function spawnPainted(kind, tex, cb) {
+  function spawnPainted(kind, tex, cb, drop) {
     withPaintedTemplate(kind, function (tpl) {
       if (!tpl) return cb(null);
       tex.encoding = THREE.sRGBEncoding;
@@ -1111,7 +1187,7 @@
         length: len,
         paintedTex: tex
       };
-      var fish = new Fish(spec, 0);
+      var fish = new Fish(spec, 0, drop);
       fish.mesh.scale.setScalar(len / base.length);
       fishes.push(fish);
       paintedCount++;
@@ -1193,7 +1269,7 @@
       .catch(function () { packList = []; });
   }
 
-  function spawnPack(name) {
+  function spawnPack(name, drop) {
     var holder = { fish: null };
     withPackModel(name, function (base) {
       var spec = {
@@ -1204,7 +1280,7 @@
         speed: 1.2 + Math.random() * 0.6,
         bend: 0
       };
-      holder.fish = new Fish(spec, 0);
+      holder.fish = new Fish(spec, 0, drop);
       fishes.push(holder.fish);
     });
     return holder;
@@ -1221,6 +1297,10 @@
   // Сводит сцену с присланным списком: новых подселяет, пропавших убирает.
   function applyPainted(list) {
       if (!Array.isArray(list)) return;
+      // Следующие синхронизации — а с ними и новые рыбы — уже «по ходу дела»:
+      // таких пришельцев запускаем из-под крышки, а не в случайной точке.
+      var drop = appliedOnce;
+      appliedOnce = true;
       setFishCount(list.length);
       var alive = {};
       list.forEach(function (item) { alive[item.id] = true; });
@@ -1236,13 +1316,13 @@
         if (item.type === 'pack') {
           paintedSeen[item.id] = null;
           paintedCount++;
-          var holder = spawnPack(item.model);
+          var holder = spawnPack(item.model, drop);
           // Модель приезжает асинхронно; к тому времени рыбку могли удалить,
           // поэтому подменяем запись только если она ещё жива.
           var check = setInterval(function () {
             if (!holder.fish) return;
             clearInterval(check);
-            if (paintedSeen.hasOwnProperty(item.id)) { paintedSeen[item.id] = holder.fish; wantShot(4); }
+            if (paintedSeen.hasOwnProperty(item.id)) { paintedSeen[item.id] = holder.fish; wantShot(8); }
             else {                       // удалили, пока грузилось
               scene.remove(holder.fish.mesh);
               var i = fishes.indexOf(holder.fish);
@@ -1277,14 +1357,14 @@
           spawnPainted(item.kind, tex, function (fish) {
             // модель ехала дольше текстуры — рыбку могли успеть удалить
             if (!fish) return;
-            if (paintedSeen.hasOwnProperty(item.id)) { paintedSeen[item.id] = fish; wantShot(4); }
+            if (paintedSeen.hasOwnProperty(item.id)) { paintedSeen[item.id] = fish; wantShot(8); }
             else {
               scene.remove(fish.mesh);
               var i = fishes.indexOf(fish);
               if (i !== -1) fishes.splice(i, 1);
               paintedCount--;
             }
-          });
+          }, drop);
         });
       });
   }
